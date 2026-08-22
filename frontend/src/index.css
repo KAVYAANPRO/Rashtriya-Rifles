@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+:root {
+  /* Tomato — primary accent */
+  --ac: #FF6B35;
+  --ac-d: #e0501c;
+  --ac-w: rgba(255, 107, 53, 0.12);
+  /* Forest Green — secondary accent */
+  --ac2: #16A34A;
+  --ac2-d: #12833c;
+  --ac2-w: rgba(22, 163, 74, 0.12);
+  /* Forest Green — tertiary / positive accent */
+  --green: #16A34A;
+  --green-w: rgba(22, 163, 74, 0.12);
+  /* Midnight Blue — dark surfaces */
+  --ink: #172033;
+  --ink-soft: #212b42;
+  /* Ghost White / White — light surfaces */
+  --bg: #F7F9FC;
+  --surface: #FFFFFF;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  font-family: Manrope, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root { min-height: 100vh; }
+
+* { box-sizing: border-box; }
+
+input, textarea, select, button { font-family: inherit; }
+
+.mono { font-family: 'Space Mono', ui-monospace, monospace; }
+
+::-webkit-scrollbar { height: 8px; width: 8px; }
+
+@keyframes gt-rise { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: none; } }
+@keyframes gt-fade { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes gt-spin { to { transform: rotate(360deg); } }
+@keyframes gt-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes gt-float { 0%, 100% { transform: translate3d(0,0,0); } 50% { transform: translate3d(0,-14px,0); } }
+@keyframes gt-float2 { 0%, 100% { transform: translate3d(0,-8px,0) rotate(-1.2deg); } 50% { transform: translate3d(0,10px,0) rotate(1.2deg); } }
+@keyframes gt-drift { 0%, 100% { transform: translate3d(0,0,0) scale(1); } 50% { transform: translate3d(30px,-24px,0) scale(1.1); } }
+@keyframes gt-bob {
+  0%   { transform: translate3d(0,0,0) rotate(0deg); }
+  25%  { transform: translate3d(3px,-8px,0) rotate(.6deg); }
+  50%  { transform: translate3d(0,-13px,0) rotate(0deg); }
+  75%  { transform: translate3d(-3px,-6px,0) rotate(-.6deg); }
+  100% { transform: translate3d(0,0,0) rotate(0deg); }
+}
+
+.anim-rise { animation: gt-rise .6s cubic-bezier(.2,.8,.2,1) both; }
+.anim-fade { animation: gt-fade .5s ease both; }
+.anim-spin { animation: gt-spin 9s linear infinite; }
+.anim-grow { animation: gt-grow 1s cubic-bezier(.2,.8,.2,1) both; transform-origin: left; }
+.anim-float { animation: gt-float 8s ease-in-out infinite; }
+.anim-float2 { animation: gt-float2 9s ease-in-out infinite; }
+.anim-drift { animation: gt-drift 16s ease-in-out infinite; }
+.anim-bob { animation: gt-bob 8s ease-in-out infinite; }

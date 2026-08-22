@@ -1,0 +1,114 @@
+const { OPENROUTER_MODEL, AI_TIMEOUT_MS } = require('../config/ai');
+const { parseAiJson } = require('../utils/aiJson');
+
+async function searchHotels(city, checkIn, checkOut, adults, children) {
+  const serpapiKey = process.env.SERPAPI_KEY;
+
+  if (serpapiKey && serpapiKey !== 'your_serpapi_key_here' && !serpapiKey.startsWith('http')) {
+    const hotels = await searchHotelsSerpApi(city, checkIn, checkOut, adults, children, serpapiKey);
+    if (hotels && hotels.length > 0) return hotels;
+    console.log('SerpApi returned no hotels or failed. Falling back to AI...');
+  }
+  
+  console.log('Using AI Fallback for hotel estimates...');
+  return await searchHotelsAI(city, checkIn, checkOut, adults, children);
+}
+
+async function searchHotelsSerpApi(city, checkIn, checkOut, adults, children, apiKey) {
+  // SerpApi Google Hotels Integration
+  let url = `https://serpapi.com/search.json?engine=google_hotels&q=${city}&check_in_date=${checkIn}&check_out_date=${checkOut}&adults=${adults}&children=${children}&currency=USD&hl=en&api_key=${apiKey}`;
+
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    
+    if (!data.properties || data.properties.length === 0) {
+      return [];
+    }
+
+    return data.properties.slice(0, 5).map((hotel, index) => ({
+      id: hotel.id || `hotel-${index}`,
+      name: hotel.name || 'Unknown Hotel',
+      type: 'Hotel',
+      pricePerNight: hotel.rate_per_night?.lowest ? parseInt(hotel.rate_per_night.lowest.replace(/[^0-9]/g, '')) : 0,
+      totalPrice: hotel.total_rate?.lowest ? parseInt(hotel.total_rate.lowest.replace(/[^0-9]/g, '')) : 0,
+      rating: hotel.overall_rating || 4.0,
+      currency: 'USD',
+      bookingUrl: hotel.link || `https://www.booking.com/searchresults.html?ss=${city}&checkin=${checkIn}&checkout=${checkOut}&group_adults=${adults}&group_children=${children}&no_rooms=1`
+    }));
+  } catch (err) {
+    console.error('SerpApi Hotel Error:', err);
+    return [];
+  }
+}
+
+async function searchHotelsAI(city, checkIn, checkOut, adults, children) {
+  const openRouterKey = process.env.OPENROUTER_API_KEY;
+  if (!openRouterKey) {
+    const err = new Error('Hotel search is not configured. Add SERPAPI_KEY or OPENROUTER_API_KEY to the backend .env file.');
+    err.statusCode = 503;
+    err.code = 'SEARCH_NOT_CONFIGURED';
+    throw err;
+  }
+
+  const prompt = `You are a travel agent. The user is looking for accommodation in ${city} from ${checkIn} to ${checkOut} for ${adults} adults and ${children} children.
+Provide 3 highly realistic accommodation options that can fit this family size:
+1. A Budget/Mid-Range Hotel
+2. A Luxury Hotel
+3. An Airbnb (Whole Apartment)
+
+Respond ONLY with a valid JSON array. Each object must have:
+- "name": string (e.g., "Ibis Styles Paris", "The Ritz", "Charming Montmartre Apartment")
+- "type": string (must be either "Hotel" or "Airbnb")
+- "pricePerNight": number (realistic estimate in USD)
+- "totalPrice": number (pricePerNight * total nights)
+- "rating": number (e.g., 4.5)`;
+
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openRouterKey}`,
+        'Content-Type': 'application/json'
+      },
+      signal: AbortSignal.timeout(AI_TIMEOUT_MS),
+      body: JSON.stringify({
+        model: OPENROUTER_MODEL,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    const aiData = await res.json();
+    const content = aiData.choices[0].message.content.trim();
+    const hotels = parseAiJson(content, 'Hotel search');
+
+    // Map AI results and dynamically inject the Booking search URL!
+    return hotels.map((h, i) => {
+      // Dynamically construct booking URLs
+      let bookingUrl = '';
+      if (h.type.toLowerCase().includes('airbnb')) {
+        bookingUrl = `https://www.airbnb.com/s/${city}/homes?checkin=${checkIn}&checkout=${checkOut}&adults=${adults}&children=${children}`;
+      } else {
+        bookingUrl = `https://www.booking.com/searchresults.html?ss=${city}&checkin=${checkIn}&checkout=${checkOut}&group_adults=${adults}&group_children=${children}&no_rooms=1`;
+      }
+
+      return {
+        id: `ai-hotel-${i}`,
+        name: h.name,
+        type: h.type,
+        pricePerNight: h.pricePerNight,
+        totalPrice: h.totalPrice,
+        rating: h.rating,
+        currency: 'USD',
+        bookingUrl: bookingUrl,
+        isAiEstimate: true
+      };
+    });
+
+  } catch (err) {
+    console.error('AI Hotel Error:', err);
+    return [];
+  }
+}
+
+module.exports = { searchHotels };
