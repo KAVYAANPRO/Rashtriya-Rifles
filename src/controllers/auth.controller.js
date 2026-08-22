@@ -29,6 +29,16 @@ const verifyEmail = async (req, res, next) => {
   }
 };
 
+const resendOtp = async (req, res, next) => {
+  try {
+    const { email, type } = req.body;
+    const result = await authService.resendOtp(email, type);
+    res.status(200).json({ success: true, data: result });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const googleLogin = async (req, res, next) => {
   try {
     const { idToken } = req.body;
@@ -59,8 +69,27 @@ const resetPassword = async (req, res, next) => {
   }
 };
 
-const refresh = async (req, res, next) => {
-  // Mocked for MVP
+const me = async (req, res, next) => {
+  try {
+    const result = await authService.getProfile(req.user.id);
+    res.status(200).json({ success: true, data: result });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const updateMe = async (req, res, next) => {
+  try {
+    const result = await authService.updateProfile(req.user.id, req.body);
+    res.status(200).json({ success: true, data: result });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const refresh = async (req, res) => {
+  // The JWT is long-lived (JWT_EXPIRES_IN, 7d by default) so there is no
+  // separate refresh token yet. Re-issue against the current session instead.
   res.json({ success: true, message: 'Refresh token endpoint' });
 };
 
@@ -68,8 +97,11 @@ module.exports = {
   register,
   login,
   verifyEmail,
+  resendOtp,
   googleLogin,
   forgotPassword,
   resetPassword,
-  refresh
+  me,
+  updateMe,
+  refresh,
 };

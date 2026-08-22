@@ -1,14 +1,16 @@
 const { z } = require('zod');
+const { dateLike } = require('./stop.schema');
 
 const createTripSchema = z.object({
   tripName: z.string().min(1).max(150),
-  description: z.string().optional(),
-  startDate: z.string().min(1), // accepts YYYY-MM-DD or full ISO
-  endDate: z.string().min(1),
-  coverImageUrl: z.string().url().optional().or(z.literal('')),
-  totalBudget: z.number().positive().optional(),
+  description: z.string().max(2000).optional(),
+  startDate: dateLike, // "YYYY-MM-DD" from the date picker, or full ISO
+  endDate: dateLike,
+  coverImageUrl: z.string().url().max(255).optional().or(z.literal('')),
+  totalBudget: z.number().nonnegative().optional(),
   currency: z.string().length(3).optional(),
   isPublic: z.boolean().optional(),
+  isArchived: z.boolean().optional(),
 });
 
 const updateTripSchema = createTripSchema.partial();

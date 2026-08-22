@@ -1,6 +1,6 @@
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
-
+const prisma = require('../config/prisma');
+const { OPENROUTER_MODEL, AI_TIMEOUT_MS } = require('../config/ai');
+const { parseAiJson } = require('../utils/aiJson');
 async function getLiveEvents(userId, tripId, stopId) {
   // 1. Validate stop and trip
   const stop = await prisma.stop.findFirst({
@@ -9,7 +9,9 @@ async function getLiveEvents(userId, tripId, stopId) {
   });
 
   if (!stop || stop.trip.userId !== userId) {
-    throw new Error('Stop not found or unauthorized');
+    const err = new Error('Stop not found or unauthorized');
+    err.statusCode = 404;
+    throw err;
   }
 
   const apiKey = process.env.TICKETMASTER_API_KEY;
@@ -23,11 +25,32 @@ async function getLiveEvents(userId, tripId, stopId) {
   const endDateTime = new Date(stop.endDate).toISOString().slice(0, 19) + 'Z';
 
   // 3. Fetch from Ticketmaster Discovery API
-  // Using city name, start and end dates, sorting by date
+  //
+  // locale=* is essential: without it the Discovery API answers in the key's
+  // default locale (en-us) and returns ZERO results for every non-US city —
+  // Paris goes from 0 to ~1,300 events purely by adding it.
   try {
-    const url = `https://app.ticketmaster.com/discovery/v2/events.json?apikey=${apiKey}&city=${encodeURIComponent(stop.city.cityName)}&startDateTime=${startDateTime}&endDateTime=${endDateTime}&sort=date,asc`;
+    const params = new URLSearchParams({
+      apikey: apiKey,
+      city: stop.city.cityName,
+      locale: '*',
+      startDateTime,
+      endDateTime,
+      sort: 'date,asc',
+      // Over-fetch: the same attraction is listed once per day, so the raw
+      // first page is all day one. We de-duplicate below.
+      size: '50',
+    });
+    // Narrow by country when we know it, so "Paris, Texas" doesn't leak in.
+    if (stop.city.countryCode) params.set('countryCode', stop.city.countryCode);
+
+    const url = `https://app.ticketmaster.com/discovery/v2/events.json?${params.toString()}`;
     const res = await fetch(url);
     const data = await res.json();
+
+    if (data.fault) {
+      console.warn('Ticketmaster fault:', data.fault.faultstring);
+    }
 
     if (!data._embedded || !data._embedded.events || data._embedded.events.length === 0) {
       // 3.5 Fallback to OpenRouter AI if Ticketmaster returns 0 events
@@ -42,7 +65,7 @@ async function getLiveEvents(userId, tripId, stopId) {
     }
 
     // 4. Map the response to a clean format
-    const events = data._embedded.events.map(event => {
+    const mapped = data._embedded.events.map(event => {
       return {
         id: event.id,
         name: event.name,
@@ -54,9 +77,22 @@ async function getLiveEvents(userId, tripId, stopId) {
         imageUrl: event.images?.[0]?.url,
         priceMin: event.priceRanges?.[0]?.min,
         priceMax: event.priceRanges?.[0]?.max,
-        currency: event.priceRanges?.[0]?.currency
+        currency: event.priceRanges?.[0]?.currency,
+        source: 'ticketmaster',
       };
     });
+
+    // Long-running exhibitions repeat for every date in the range; keep the
+    // earliest showing of each so the list is 12 different things to do.
+    const seen = new Set();
+    const events = [];
+    for (const event of mapped) {
+      const key = `${event.name}|${event.venue || ''}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      events.push(event);
+      if (events.length === 12) break;
+    }
 
     return events;
   } catch (err) {
@@ -92,8 +128,9 @@ Each object must have these exact keys:
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
       },
+      signal: AbortSignal.timeout(AI_TIMEOUT_MS),
       body: JSON.stringify({
-        model: 'openai/gpt-4o-mini',
+        model: OPENROUTER_MODEL,
         messages: [{ role: 'user', content: prompt }]
       })
     });
@@ -106,10 +143,10 @@ Each object must have these exact keys:
 
     const content = data.choices[0].message.content.trim();
     // In case the model returns markdown backticks anyway
-    const cleanContent = content.replace(/^```json/i, '').replace(/```$/i, '').trim();
     
-    const events = JSON.parse(cleanContent);
-    return events;
+    const events = parseAiJson(content, 'Event suggestions');
+    // Tag these so the UI can say they are suggestions, not bookable listings.
+    return events.map((e) => ({ ...e, source: 'ai' }));
 
   } catch (err) {
     console.error('Error fetching events from OpenRouter:', err);
@@ -121,6 +158,7 @@ function returnMockEvents(cityName, startDate, endDate) {
   // Returns fake data to prevent crashes if API key is missing
   return [
     {
+      source: 'sample',
       id: 'mock-1',
       name: `Epic Symphony Orchestra in ${cityName}`,
       type: 'Music',
@@ -133,6 +171,7 @@ function returnMockEvents(cityName, startDate, endDate) {
       currency: 'USD'
     },
     {
+      source: 'sample',
       id: 'mock-2',
       name: `${cityName} Comedy Festival`,
       type: 'Arts & Theatre',

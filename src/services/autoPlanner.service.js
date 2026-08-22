@@ -1,13 +1,23 @@
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const prisma = require('../config/prisma');
 const budgetService = require('./budget.service');
+const { OPENROUTER_MODEL, AI_TIMEOUT_MS } = require('../config/ai');
+const { parseAiJson } = require('../utils/aiJson');
+const { buildDaySchedule } = require('../utils/schedule');
 
 async function autoPlanItinerary(userId, tripId, stopId, preferences = [], dietaryPreference = 'Any') {
   const trip = await prisma.trip.findFirst({ where: { id: tripId, userId } });
-  if (!trip) throw new Error('Trip not found or unauthorized');
+  if (!trip) {
+    const err = new Error('Trip not found or unauthorized');
+    err.statusCode = 404;
+    throw err;
+  }
 
   const stop = await prisma.stop.findFirst({ where: { id: stopId, tripId } });
-  if (!stop) throw new Error('Stop not found');
+  if (!stop) {
+    const err = new Error('Stop not found');
+    err.statusCode = 404;
+    throw err;
+  }
 
   const budget = await budgetService.getTripBudget(userId, tripId);
   
@@ -37,10 +47,18 @@ Their general preferences are: ${preferences.length > 0 ? preferences.join(', ')
 Their dietary preference is: ${dietaryPreference}.
 
 RULES:
-1. You MUST schedule 3 meals a day (Breakfast, Lunch, Dinner) plus 1 Snack/Coffee break.
-2. Suggest famous, highly-rated restaurants. ALL recommended food and restaurants MUST strictly adhere to their dietary preference (${dietaryPreference}).
-3. GEO-CLUSTER: Group activities geographically! If they visit the Eiffel Tower in the morning, their lunch and afternoon activities MUST be very close by to save cab fare and time.
-4. Respond ONLY with a valid JSON array representing the itinerary. No markdown.
+1. Produce EXACTLY ${durationDays} day object(s), numbered 1 to ${durationDays}. Never invent extra days.
+2. You MUST schedule 3 meals a day (Breakfast, Lunch, Dinner) plus 1 Snack/Coffee break.
+3. Suggest famous, highly-rated restaurants. ALL recommended food and restaurants MUST strictly adhere to their dietary preference (${dietaryPreference}).
+4. GEO-CLUSTER: Group activities geographically! If they visit the Eiffel Tower in the morning, their lunch and afternoon activities MUST be very close by to save cab fare and time.
+5. TIMING - this matters as much as the choices:
+   - Every activity needs "startTime" AND "endTime" in 24-hour HH:MM.
+   - List each day in chronological order, earliest first.
+   - Activities MUST NOT overlap. Leave at least 15 minutes between one ending and the next starting, for travel.
+   - Keep the day between 08:00 and 23:30.
+   - Anchor meals realistically: breakfast 08:00-09:30, lunch 12:00-14:00, a coffee or snack mid-afternoon, dinner 19:00-21:00.
+   - "durationHours" must agree with startTime and endTime.
+6. Respond ONLY with a valid JSON array representing the itinerary. No markdown.
 
 JSON SCHEMA:
 [
@@ -49,10 +67,11 @@ JSON SCHEMA:
     "activities": [
       {
         "name": "Café de l'Homme",
-        "type": "Food", // Use "Food", "Adventure", or "Culture"
-        "cost": 25.00, // Estimated cost in USD
+        "type": "Food",
+        "cost": 25.00,
         "durationHours": 1.5,
-        "startTime": "08:30" // HH:MM format
+        "startTime": "08:30",
+        "endTime": "10:00"
       }
     ]
   }
@@ -60,7 +79,10 @@ JSON SCHEMA:
 
   const aiKey = process.env.OPENROUTER_API_KEY;
   if (!aiKey || aiKey === 'your_openrouter_api_key_here') {
-    throw new Error('OPENROUTER_API_KEY is not set. Cannot auto-plan without AI.');
+    const err = new Error('Auto-planning needs an AI key. Add OPENROUTER_API_KEY to the backend .env file.');
+    err.statusCode = 503;
+    err.code = 'AI_NOT_CONFIGURED';
+    throw err;
   }
 
   // 3. Ping OpenRouter
@@ -70,41 +92,67 @@ JSON SCHEMA:
       'Authorization': `Bearer ${aiKey}`,
       'Content-Type': 'application/json'
     },
+    signal: AbortSignal.timeout(AI_TIMEOUT_MS),
     body: JSON.stringify({
-      model: 'openai/gpt-4o-mini',
+      model: OPENROUTER_MODEL,
       messages: [{ role: 'user', content: prompt }]
     })
   });
 
   const aiData = await res.json();
   if (!aiData.choices || aiData.choices.length === 0) {
-    throw new Error('AI failed to generate itinerary');
+    const err = new Error(aiData.error?.message || 'AI failed to generate itinerary');
+    err.statusCode = 502;
+    throw err;
   }
 
   const content = aiData.choices[0].message.content.trim();
-  const cleanContent = content.replace(/^```json/i, '').replace(/```$/i, '').trim();
   let aiItinerary;
   try {
-    aiItinerary = JSON.parse(cleanContent);
+    aiItinerary = parseAiJson(content, 'The auto-planner');
   } catch (e) {
-    throw new Error('AI returned invalid JSON');
+    const err = new Error('AI returned an itinerary we could not read. Please try again.');
+    err.statusCode = 502;
+    throw err;
   }
 
-  // 4. Parse AI Itinerary and Create Missing Activities in DB
+  // 4. Turn the reply into a real timetable, then create any missing catalog
+  //    entries. The model is never trusted for day numbers or clock times.
   const plannedActivities = [];
   let activitiesScheduledCount = 0;
+  let droppedCount = 0;
+  const dayBreakdown = [];
 
-  for (const dayPlan of aiItinerary) {
+  // Only keep days that actually fall inside this stop, and merge duplicates.
+  const byDay = new Map();
+  for (const dayPlan of Array.isArray(aiItinerary) ? aiItinerary : []) {
+    const dayNumber = Math.round(Number(dayPlan?.day));
+    if (!Number.isFinite(dayNumber) || dayNumber < 1 || dayNumber > durationDays) {
+      droppedCount += (dayPlan?.activities || []).length;
+      continue;
+    }
+    const list = byDay.get(dayNumber) || [];
+    list.push(...(dayPlan.activities || []).filter((a) => a && typeof a.name === 'string' && a.name.trim()));
+    byDay.set(dayNumber, list);
+  }
+
+  for (const dayNumber of [...byDay.keys()].sort((a, b) => a - b)) {
     const currentDay = new Date(start);
-    currentDay.setDate(currentDay.getDate() + (dayPlan.day - 1));
+    currentDay.setDate(currentDay.getDate() + (dayNumber - 1));
 
-    for (const act of dayPlan.activities) {
-      // Check if activity exists in our DB
+    const { scheduled, overflow } = buildDaySchedule(byDay.get(dayNumber));
+    droppedCount += overflow.length;
+
+    // A venue can only be booked once per day (unique index on trip+activity+date).
+    const usedToday = new Set();
+
+    for (const act of scheduled) {
+      const cost = Number.isFinite(Number(act.cost)) ? Math.max(0, Number(act.cost)) : 0;
+
       let dbActivity = await prisma.activity.findFirst({
         where: { cityId: stop.cityId, activityName: act.name }
       });
 
-      // Create it if it doesn't exist!
       if (!dbActivity) {
         let catId = cultureCategory.id;
         if (act.type === 'Food') catId = foodCategory.id;
@@ -115,39 +163,60 @@ JSON SCHEMA:
             activityName: act.name,
             cityId: stop.cityId,
             categoryId: catId,
-            estimatedCost: act.cost,
-            estimatedDuration: Math.round(act.durationHours * 60),
+            estimatedCost: cost,
+            estimatedDuration: act.durationMinutes,
             rating: 4.5, // Default AI rating
             isActive: true
           }
         });
       }
 
-      // Schedule it
+      if (usedToday.has(dbActivity.id)) {
+        droppedCount++;
+        continue;
+      }
+      usedToday.add(dbActivity.id);
+
       plannedActivities.push({
         tripId,
         stopId,
         activityId: dbActivity.id,
         scheduledDate: currentDay,
         scheduledStartTime: act.startTime,
-        actualCost: act.cost
+        scheduledEndTime: act.endTime,
+        actualCost: cost
       });
-      
+
       activitiesScheduledCount++;
-      remainingBudget -= act.cost;
+      remainingBudget -= cost;
     }
+
+    dayBreakdown.push({
+      day: dayNumber,
+      date: currentDay.toISOString().slice(0, 10),
+      activities: scheduled.length,
+      firstStart: scheduled[0]?.startTime || null,
+      lastEnd: scheduled[scheduled.length - 1]?.endTime || null,
+    });
   }
+
 
   // 5. Save to TripActivity
   if (plannedActivities.length > 0) {
     await prisma.tripActivity.deleteMany({ where: { tripId, stopId } }); // Clear previous
-    await prisma.tripActivity.createMany({ data: plannedActivities });
+    // The AI can propose the same venue twice in a day; the unique index on
+    // (tripId, activityId, scheduledDate) would reject the whole batch.
+    await prisma.tripActivity.createMany({ data: plannedActivities, skipDuplicates: true });
   }
 
   return {
-    daysPlanned: durationDays,
+    daysPlanned: dayBreakdown.length || durationDays,
+    stopDays: durationDays,
     activitiesScheduled: activitiesScheduledCount,
-    remainingBudget: hasBudgetLimit ? remainingBudget : 'No limit',
+    droppedCount,
+    days: dayBreakdown,
+    remainingBudget: hasBudgetLimit ? remainingBudget : null,
+    hasBudgetLimit,
     aiSource: true
   };
 }

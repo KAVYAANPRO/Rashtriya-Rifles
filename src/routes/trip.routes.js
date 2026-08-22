@@ -20,11 +20,13 @@ router.get('/:id', ctrl.getTripById);
 router.patch('/:id', validate(updateTripSchema), ctrl.updateTrip);
 router.delete('/:id', ctrl.deleteTrip);
 
-router.use('/:tripId/stops', stopRoutes);
+// Stop-scoped sub-resources are mounted before the plain /stops router so the
+// more specific paths win.
 router.use('/:tripId/stops/:stopId/activities', activityRoutes);
 router.use('/:tripId/stops/:stopId/recommendations', recommendationRoutes);
 router.use('/:tripId/stops/:stopId/auto-plan', autoPlannerRoutes);
 router.use('/:tripId/stops/:stopId/events', eventRoutes);
+router.use('/:tripId/stops', stopRoutes);
 router.use('/:tripId/budget', budgetRoutes);
 router.use('/:tripId/share', shareRoutes);
 

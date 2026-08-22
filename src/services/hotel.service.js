@@ -1,3 +1,6 @@
+const { OPENROUTER_MODEL, AI_TIMEOUT_MS } = require('../config/ai');
+const { parseAiJson } = require('../utils/aiJson');
+
 async function searchHotels(city, checkIn, checkOut, adults, children) {
   const serpapiKey = process.env.SERPAPI_KEY;
 
@@ -42,7 +45,10 @@ async function searchHotelsSerpApi(city, checkIn, checkOut, adults, children, ap
 async function searchHotelsAI(city, checkIn, checkOut, adults, children) {
   const openRouterKey = process.env.OPENROUTER_API_KEY;
   if (!openRouterKey) {
-    throw new Error('No API keys configured for hotel search.');
+    const err = new Error('Hotel search is not configured. Add SERPAPI_KEY or OPENROUTER_API_KEY to the backend .env file.');
+    err.statusCode = 503;
+    err.code = 'SEARCH_NOT_CONFIGURED';
+    throw err;
   }
 
   const prompt = `You are a travel agent. The user is looking for accommodation in ${city} from ${checkIn} to ${checkOut} for ${adults} adults and ${children} children.
@@ -65,16 +71,16 @@ Respond ONLY with a valid JSON array. Each object must have:
         'Authorization': `Bearer ${openRouterKey}`,
         'Content-Type': 'application/json'
       },
+      signal: AbortSignal.timeout(AI_TIMEOUT_MS),
       body: JSON.stringify({
-        model: 'openai/gpt-4o-mini',
+        model: OPENROUTER_MODEL,
         messages: [{ role: 'user', content: prompt }]
       })
     });
 
     const aiData = await res.json();
     const content = aiData.choices[0].message.content.trim();
-    const cleanContent = content.replace(/^```json/i, '').replace(/```$/i, '').trim();
-    const hotels = JSON.parse(cleanContent);
+    const hotels = parseAiJson(content, 'Hotel search');
 
     // Map AI results and dynamically inject the Booking search URL!
     return hotels.map((h, i) => {

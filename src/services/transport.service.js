@@ -1,7 +1,13 @@
+const { OPENROUTER_MODEL, AI_TIMEOUT_MS } = require('../config/ai');
+const { parseAiJson } = require('../utils/aiJson');
+
 async function searchTransport(city) {
   const openRouterKey = process.env.OPENROUTER_API_KEY;
   if (!openRouterKey) {
-    throw new Error('No API keys configured for transport search.');
+    const err = new Error('Local transport lookup is not configured. Add OPENROUTER_API_KEY to the backend .env file.');
+    err.statusCode = 503;
+    err.code = 'SEARCH_NOT_CONFIGURED';
+    throw err;
   }
 
   const prompt = `You are a local travel guide. The user needs transportation information for ${city}.
@@ -35,17 +41,17 @@ Respond ONLY with a valid JSON object matching this exact schema:
         'Authorization': `Bearer ${openRouterKey}`,
         'Content-Type': 'application/json'
       },
+      signal: AbortSignal.timeout(AI_TIMEOUT_MS),
       body: JSON.stringify({
-        model: 'openai/gpt-4o-mini',
+        model: OPENROUTER_MODEL,
         messages: [{ role: 'user', content: prompt }]
       })
     });
 
     const aiData = await res.json();
     const content = aiData.choices[0].message.content.trim();
-    const cleanContent = content.replace(/^```json/i, '').replace(/```$/i, '').trim();
     
-    return JSON.parse(cleanContent);
+    return parseAiJson(content, 'Transport lookup');
   } catch (err) {
     console.error('AI Transport Error:', err);
     return { cabs: [], publicTransport: [] };

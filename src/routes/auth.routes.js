@@ -1,29 +1,29 @@
 const router = require('express').Router();
-const { 
-  register, 
-  login, 
-  refresh,
-  verifyEmail, 
-  googleLogin, 
-  forgotPassword, 
-  resetPassword 
-} = require('../controllers/auth.controller');
+const ctrl = require('../controllers/auth.controller');
+const authenticate = require('../middleware/authenticate');
 const validate = require('../middleware/validate');
-const { 
-  registerSchema, 
-  loginSchema, 
-  verifyEmailSchema, 
-  googleLoginSchema, 
-  forgotPasswordSchema, 
-  resetPasswordSchema 
+const {
+  registerSchema,
+  loginSchema,
+  verifyEmailSchema,
+  resendOtpSchema,
+  googleLoginSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+  updateProfileSchema,
 } = require('../schemas/auth.schema');
 
-router.post('/register', validate(registerSchema), register);
-router.post('/login', validate(loginSchema), login);
-router.post('/refresh-token', refresh);
-router.post('/verify-email', validate(verifyEmailSchema), verifyEmail);
-router.post('/google-login', validate(googleLoginSchema), googleLogin);
-router.post('/forgot-password', validate(forgotPasswordSchema), forgotPassword);
-router.post('/reset-password', validate(resetPasswordSchema), resetPassword);
+router.post('/register', validate(registerSchema), ctrl.register);
+router.post('/login', validate(loginSchema), ctrl.login);
+router.post('/refresh-token', ctrl.refresh);
+router.post('/verify-email', validate(verifyEmailSchema), ctrl.verifyEmail);
+router.post('/resend-otp', validate(resendOtpSchema), ctrl.resendOtp);
+router.post('/google-login', validate(googleLoginSchema), ctrl.googleLogin);
+router.post('/forgot-password', validate(forgotPasswordSchema), ctrl.forgotPassword);
+router.post('/reset-password', validate(resetPasswordSchema), ctrl.resetPassword);
+
+// Current user profile
+router.get('/me', authenticate, ctrl.me);
+router.patch('/me', authenticate, validate(updateProfileSchema), ctrl.updateMe);
 
 module.exports = router;

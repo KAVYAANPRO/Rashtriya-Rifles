@@ -2,15 +2,21 @@
 CREATE TABLE `users` (
     `user_id` INTEGER NOT NULL AUTO_INCREMENT,
     `email` VARCHAR(100) NOT NULL,
-    `password_hash` VARCHAR(255) NOT NULL,
+    `password_hash` VARCHAR(255) NULL,
+    `auth_provider` VARCHAR(20) NOT NULL DEFAULT 'LOCAL',
+    `google_id` VARCHAR(255) NULL,
     `first_name` VARCHAR(50) NOT NULL,
     `last_name` VARCHAR(50) NOT NULL,
     `profile_picture_url` VARCHAR(255) NULL,
     `bio` TEXT NULL,
+    `phone` VARCHAR(30) NULL,
+    `city` VARCHAR(100) NULL,
+    `country` VARCHAR(100) NULL,
     `preferred_currency` VARCHAR(3) NOT NULL DEFAULT 'USD',
     `language_preference` VARCHAR(10) NOT NULL DEFAULT 'en',
     `is_active` BOOLEAN NOT NULL DEFAULT true,
     `is_verified` BOOLEAN NOT NULL DEFAULT false,
+    `is_premium` BOOLEAN NOT NULL DEFAULT false,
     `email_verified_at` DATETIME(3) NULL,
     `last_login_at` DATETIME(3) NULL,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -18,6 +24,7 @@ CREATE TABLE `users` (
     `deleted_at` DATETIME(3) NULL,
 
     UNIQUE INDEX `users_email_key`(`email`),
+    UNIQUE INDEX `users_google_id_key`(`google_id`),
     INDEX `users_email_idx`(`email`),
     INDEX `users_is_active_idx`(`is_active`),
     INDEX `users_created_at_idx`(`created_at`),
@@ -37,6 +44,40 @@ CREATE TABLE `user_preferences` (
 
     UNIQUE INDEX `user_preferences_user_id_key`(`user_id`),
     PRIMARY KEY (`preference_id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `otp_codes` (
+    `otp_id` INTEGER NOT NULL AUTO_INCREMENT,
+    `user_id` INTEGER NOT NULL,
+    `code` VARCHAR(6) NOT NULL,
+    `type` VARCHAR(50) NOT NULL,
+    `expires_at` DATETIME(3) NOT NULL,
+    `is_used` BOOLEAN NOT NULL DEFAULT false,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    INDEX `otp_codes_user_id_idx`(`user_id`),
+    INDEX `otp_codes_code_idx`(`code`),
+    PRIMARY KEY (`otp_id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `payments` (
+    `payment_id` INTEGER NOT NULL AUTO_INCREMENT,
+    `user_id` INTEGER NOT NULL,
+    `razorpay_order_id` VARCHAR(100) NOT NULL,
+    `razorpay_payment_id` VARCHAR(100) NULL,
+    `amount` DECIMAL(10, 2) NOT NULL,
+    `currency` VARCHAR(3) NOT NULL DEFAULT 'INR',
+    `status` VARCHAR(20) NOT NULL DEFAULT 'created',
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updated_at` DATETIME(3) NOT NULL,
+
+    UNIQUE INDEX `payments_razorpay_order_id_key`(`razorpay_order_id`),
+    UNIQUE INDEX `payments_razorpay_payment_id_key`(`razorpay_payment_id`),
+    INDEX `payments_user_id_idx`(`user_id`),
+    INDEX `payments_status_idx`(`status`),
+    PRIMARY KEY (`payment_id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
@@ -131,6 +172,7 @@ CREATE TABLE `activities` (
     `rating` DECIMAL(3, 2) NULL,
     `review_count` INTEGER NOT NULL DEFAULT 0,
     `image_url` VARCHAR(255) NULL,
+    `booking_url` VARCHAR(500) NULL,
     `is_popular` BOOLEAN NOT NULL DEFAULT false,
     `is_active` BOOLEAN NOT NULL DEFAULT true,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -199,6 +241,12 @@ CREATE TABLE `trip_shares` (
 
 -- AddForeignKey
 ALTER TABLE `user_preferences` ADD CONSTRAINT `user_preferences_user_id_fkey` FOREIGN KEY (`user_id`) REFERENCES `users`(`user_id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `otp_codes` ADD CONSTRAINT `otp_codes_user_id_fkey` FOREIGN KEY (`user_id`) REFERENCES `users`(`user_id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `payments` ADD CONSTRAINT `payments_user_id_fkey` FOREIGN KEY (`user_id`) REFERENCES `users`(`user_id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `trips` ADD CONSTRAINT `trips_user_id_fkey` FOREIGN KEY (`user_id`) REFERENCES `users`(`user_id`) ON DELETE CASCADE ON UPDATE CASCADE;

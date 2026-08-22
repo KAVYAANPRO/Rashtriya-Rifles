@@ -1,3 +1,6 @@
+const { OPENROUTER_MODEL, AI_TIMEOUT_MS } = require('../config/ai');
+const { parseAiJson } = require('../utils/aiJson');
+
 async function searchFlights(origin, destination, date, returnDate, adults = 1, children = 0) {
   const serpapiKey = process.env.SERPAPI_KEY;
 
@@ -53,7 +56,10 @@ async function searchFlightsSerpApi(origin, destination, date, returnDate, adult
 async function searchFlightsAI(origin, destination, date, returnDate, adults, children) {
   const openRouterKey = process.env.OPENROUTER_API_KEY;
   if (!openRouterKey) {
-    throw new Error('No API keys configured for AI flight search.');
+    const err = new Error('Flight search is not configured. Add SERPAPI_KEY or OPENROUTER_API_KEY to the backend .env file.');
+    err.statusCode = 503;
+    err.code = 'SEARCH_NOT_CONFIGURED';
+    throw err;
   }
 
   const prompt = `You are a travel agent. The user wants to fly from ${origin} to ${destination} on ${date}${returnDate ? ` returning on ${returnDate}` : ''} for a family of ${adults} adults and ${children} children.
@@ -83,16 +89,16 @@ Respond ONLY with a valid JSON object matching this exact schema:
         'Authorization': `Bearer ${openRouterKey}`,
         'Content-Type': 'application/json'
       },
+      signal: AbortSignal.timeout(AI_TIMEOUT_MS),
       body: JSON.stringify({
-        model: 'openai/gpt-4o-mini',
+        model: OPENROUTER_MODEL,
         messages: [{ role: 'user', content: prompt }]
       })
     });
 
     const aiData = await res.json();
     const content = aiData.choices[0].message.content.trim();
-    const cleanContent = content.replace(/^```json/i, '').replace(/```$/i, '').trim();
-    const result = JSON.parse(cleanContent);
+    const result = parseAiJson(content, 'Flight search');
 
     // Map AI results and dynamically inject the Google Flights search URL!
     const mappedFlights = result.flights.map((f, i) => ({

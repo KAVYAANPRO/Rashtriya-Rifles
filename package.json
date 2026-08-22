@@ -4,6 +4,9 @@
     "start": "node server.js",
     "postinstall": "prisma generate",
     "migrate": "prisma migrate deploy",
+    "migrate:dev": "prisma migrate dev",
+    "seed": "node prisma/seed.js",
+    "studio": "prisma studio",
     "test": "jest --runInBand"
   },
   "prisma": {

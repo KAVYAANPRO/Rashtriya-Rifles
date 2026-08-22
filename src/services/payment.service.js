@@ -1,8 +1,6 @@
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
-
+const prisma = require('../config/prisma');
 // Lazily create Razorpay instance so server boots even if keys aren't set yet
 function getRazorpay() {
   if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
@@ -65,17 +63,33 @@ async function verifyPayment(userId, { razorpay_order_id, razorpay_payment_id, r
     .digest('hex');
 
   if (expectedSignature !== razorpay_signature) {
-    throw new Error('Payment signature verification failed. Possible fraud attempt.');
+    // A bad signature is a rejected request, not a server fault.
+    const err = new Error('Payment signature verification failed. Possible fraud attempt.');
+    err.statusCode = 400;
+    err.code = 'INVALID_SIGNATURE';
+
+    // Record the failed attempt against the order if we know about it.
+    await prisma.payment.updateMany({
+      where: { razorpayOrderId: razorpay_order_id, userId },
+      data: { status: 'failed' },
+    });
+    throw err;
   }
 
   // Step 2: Update our payment record
-  await prisma.payment.update({
-    where: { razorpayOrderId: razorpay_order_id },
+  const updated = await prisma.payment.updateMany({
+    where: { razorpayOrderId: razorpay_order_id, userId },
     data: {
       razorpayPaymentId: razorpay_payment_id,
       status: 'success',
     },
   });
+
+  if (updated.count === 0) {
+    const err = new Error('No matching order found for this account.');
+    err.statusCode = 404;
+    throw err;
+  }
 
   // Step 3: Upgrade user to premium
   await prisma.user.update({

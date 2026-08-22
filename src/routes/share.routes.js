@@ -5,6 +5,9 @@ const validate = require('../middleware/validate');
 const { createShareSchema } = require('../schemas/share.schema');
 
 router.use(authenticate);
+
+router.get('/', ctrl.getShareLink);
 router.post('/', validate(createShareSchema), ctrl.createShareLink);
+router.delete('/', ctrl.revokeShareLink);
 
 module.exports = router;

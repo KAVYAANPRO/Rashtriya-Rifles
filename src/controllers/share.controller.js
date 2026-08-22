@@ -10,14 +10,33 @@ const createShareLink = async (req, res, next) => {
   }
 };
 
-const getPublicTrip = async (req, res, next) => {
+const getShareLink = async (req, res, next) => {
   try {
-    const slug = req.params.slug;
-    const result = await shareService.getPublicTripBySlug(slug);
+    const tripId = parseInt(req.params.tripId, 10);
+    const result = await shareService.getShareLink(req.user.id, tripId);
     res.status(200).json({ success: true, data: result });
   } catch (error) {
     next(error);
   }
 };
 
-module.exports = { createShareLink, getPublicTrip };
+const revokeShareLink = async (req, res, next) => {
+  try {
+    const tripId = parseInt(req.params.tripId, 10);
+    const result = await shareService.revokeShareLink(req.user.id, tripId);
+    res.status(200).json({ success: true, data: result });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getPublicTrip = async (req, res, next) => {
+  try {
+    const result = await shareService.getPublicTripBySlug(req.params.slug);
+    res.status(200).json({ success: true, data: result });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = { createShareLink, getShareLink, revokeShareLink, getPublicTrip };
