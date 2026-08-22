@@ -19,6 +19,7 @@ app.use('/api/v1/trips', require('./routes/trip.routes'));
 app.use('/api/v1/public', require('./routes/public.routes'));
 app.use('/api/v1/flights', require('./routes/flight.routes'));
 app.use('/api/v1/hotels', require('./routes/hotel.routes'));
+app.use('/api/v1/transport', require('./routes/transport.routes'));
 
 app.use(errorHandler);
 
