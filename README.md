@@ -1,16 +1,56 @@
-# React + Vite
+# GlobalTrotter
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Plan multi-city trips, build day-by-day itineraries, and keep the whole budget in one place.
 
-Currently, two official plugins are available:
+## Branches
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+| Branch | Contents |
+| --- | --- |
+| `main` | This README. |
+| `frontend` | The full React frontend. |
 
-## React Compiler
+## Frontend
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+A React single-page app built with Vite and Tailwind CSS v4. It currently runs entirely on
+the client — all data lives in React context backed by `localStorage`, so it can be demoed
+without a backend. The store functions are shaped to mirror the planned REST API, so wiring
+in a real backend later means swapping those functions for HTTP calls.
 
-## Expanding the Oxlint configuration
+### Screens
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+- **Welcome** — public landing page with an animated hero, feature overview, and footer
+- **Login / Register** — local account creation and sign-in
+- **Dashboard** — recent trips, city suggestions, quick search
+- **Create trip** — name, starting city, dates, budget, plus one-tap activity suggestions
+- **Itinerary builder** — add stops per city and drop activities into each, with a live cost total
+- **Itinerary & budget** — day-list and by-city views, category cost breakdown, over-budget warning
+- **My trips** — trips grouped by Upcoming / Ongoing / Past, with search and delete
+- **Profile** — editable details and trip history
+
+### Tech
+
+- React 19 + Vite
+- React Router
+- Tailwind CSS v4
+- Framer Motion (hero animation)
+
+### Running it
+
+```bash
+git checkout frontend
+cd app
+npm install
+npm run dev
+```
+
+The dev server starts on <http://localhost:5173>.
+
+Demo account: `ananya.rao` / `travel2026`
+
+### Building
+
+```bash
+npm run build
+```
+
+Output goes to `dist/`.
