@@ -4,11 +4,10 @@ import { useApp } from '../store/AppContext'
 import { Field, TextAreaField, PrimaryButton } from '../components/ui'
 
 const FIELDS = [
-  { key: 'username', label: 'Username', hint: 'jane.doe' },
-  { key: 'password', label: 'Password', hint: '••••••••', type: 'password' },
+  { key: 'email', label: 'Email', hint: 'jane@example.com', type: 'email' },
+  { key: 'password', label: 'Password', hint: 'At least 8 characters', type: 'password' },
   { key: 'firstName', label: 'First name', hint: 'Jane' },
   { key: 'lastName', label: 'Last name', hint: 'Doe' },
-  { key: 'email', label: 'Email', hint: 'jane@example.com' },
   { key: 'phone', label: 'Phone', hint: '+1 555 010 1234' },
   { key: 'city', label: 'City', hint: 'Austin' },
   { key: 'country', label: 'Country', hint: 'United States' },
@@ -23,24 +22,30 @@ export default function Register() {
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault()
     setError('')
-    if (!form.username?.trim() || !form.password) {
-      setError('Username and password are required.')
+    if (!form.email?.trim() || !form.password) {
+      setError('Email and password are required.')
       return
     }
-    if (form.password.length < 6) {
-      setError('Password should be at least 6 characters.')
+    if (!form.firstName?.trim() || !form.lastName?.trim()) {
+      setError('First and last name are required.')
+      return
+    }
+    if (form.password.length < 8) {
+      setError('Password should be at least 8 characters.')
       return
     }
     setLoading(true)
-    setTimeout(() => {
-      const res = register(form)
-      setLoading(false)
-      if (!res.ok) setError(res.error)
-      else navigate('/')
-    }, 200)
+    const res = await register(form)
+    setLoading(false)
+    if (!res.ok) {
+      setError(res.error)
+      return
+    }
+    // A 6-digit code was just emailed — send them straight to the OTP screen.
+    navigate(`/verify-email?email=${encodeURIComponent(res.email || form.email.trim())}`)
   }
 
   return (
@@ -93,7 +98,7 @@ export default function Register() {
                 {loading ? 'Creating…' : 'Register user'}
               </PrimaryButton>
               <div className="text-[13px] text-[#8b8ca0] leading-snug max-w-[280px]">
-                Your account is created locally in this demo — no email verification needed.
+                We'll email you a 6-digit code to confirm your address before your first sign-in.
               </div>
             </div>
           </div>

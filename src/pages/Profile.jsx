@@ -1,17 +1,23 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../store/AppContext'
-import { Field, EmptyState } from '../components/ui'
+import { Field, SelectField, EmptyState } from '../components/ui'
+import PremiumCard from '../components/PremiumCard'
 import { fmtRange, tripStatus } from '../lib/format'
 
 const PROFILE_FIELDS = [
   { key: 'firstName', label: 'First name' },
   { key: 'lastName', label: 'Last name' },
-  { key: 'email', label: 'Email' },
+  { key: 'email', label: 'Email', readOnly: true },
   { key: 'phone', label: 'Phone' },
   { key: 'city', label: 'City' },
   { key: 'country', label: 'Country' },
 ]
+
+// Email identifies the account and is changed through verification, not here.
+const EDITABLE = PROFILE_FIELDS.filter((f) => !f.readOnly).map((f) => f.key)
+
+const CURRENCIES = ['USD', 'EUR', 'JPY', 'INR', 'GBP', 'AUD', 'CAD', 'SGD', 'CHF', 'ZAR', 'THB']
 
 export default function Profile() {
   const { currentUser, updateProfile, userTrips, logout } = useApp()
@@ -19,10 +25,20 @@ export default function Profile() {
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState(currentUser)
 
-  const startEdit = () => { setForm(currentUser); setEditing(true) }
-  const save = () => { updateProfile(form); setEditing(false) }
+  const [saving, setSaving] = useState(false)
 
-  const initials = `${currentUser.firstName?.[0] || currentUser.username[0]}${currentUser.lastName?.[0] || ''}`.toUpperCase()
+  const startEdit = () => { setForm(currentUser); setEditing(true) }
+
+  const save = async () => {
+    setSaving(true)
+    const patch = Object.fromEntries(EDITABLE.map((k) => [k, form[k] ?? '']))
+    patch.preferredCurrency = form.currency || 'USD'
+    const res = await updateProfile(patch)
+    setSaving(false)
+    if (res.ok) setEditing(false)
+  }
+
+  const initials = `${currentUser.firstName?.[0] || currentUser.username?.[0] || '?'}${currentUser.lastName?.[0] || ''}`.toUpperCase()
   const upcoming = userTrips.filter((t) => tripStatus(t) !== 'Past')
   const past = userTrips.filter((t) => tripStatus(t) === 'Past')
 
@@ -59,12 +75,20 @@ export default function Profile() {
                     key={f.key}
                     label={f.label}
                     value={form[f.key] || ''}
+                    readOnly={f.readOnly}
                     onChange={(e) => setForm((s) => ({ ...s, [f.key]: e.target.value }))}
                   />
                 ))}
+                <SelectField
+                  label="Preferred currency"
+                  value={form.currency || 'USD'}
+                  onChange={(e) => setForm((s) => ({ ...s, currency: e.target.value }))}
+                >
+                  {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </SelectField>
               </div>
               <div className="flex items-center gap-3 mt-4.5">
-                <div onClick={save} className="px-6 py-3 rounded-xl text-white text-sm font-bold cursor-pointer" style={{ background: 'var(--ac)' }}>Save changes</div>
+                <div onClick={saving ? undefined : save} className={`px-6 py-3 rounded-xl text-white text-sm font-bold cursor-pointer ${saving ? 'opacity-50' : ''}`} style={{ background: 'var(--ac)' }}>{saving ? 'Saving…' : 'Save changes'}</div>
                 <div onClick={() => setEditing(false)} className="px-6 py-3 rounded-xl border border-[#dfe1ec] text-sm font-bold text-[#6b6c80] cursor-pointer">Cancel</div>
               </div>
             </>
@@ -76,9 +100,17 @@ export default function Profile() {
                   <div className="text-[15px] font-bold mt-1.5">{currentUser[f.key] || '—'}</div>
                 </div>
               ))}
+              <div className="p-3.5 rounded-2xl bg-[#f7f8fc] border border-[#eceef4]">
+                <div className="mono text-[10px] text-[#8b8ca0] tracking-widest">PREFERRED CURRENCY</div>
+                <div className="text-[15px] font-bold mt-1.5">{currentUser.currency || 'USD'}</div>
+              </div>
             </div>
           )}
         </div>
+      </div>
+
+      <div className="mt-6">
+        <PremiumCard />
       </div>
 
       <div className="mt-10">

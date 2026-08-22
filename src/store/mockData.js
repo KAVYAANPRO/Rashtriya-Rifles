@@ -1,3 +1,7 @@
+// Kept for reference only — the app now reads cities, categories and
+// activities from the API (see src/lib/api.js -> catalog). The backend seed
+// in Backend/prisma/seed.js loads this same catalog into MySQL.
+
 export const CATEGORIES = [
   'Adventure', 'Food & Dining', 'Culture & History', 'Shopping',
   'Nightlife', 'Nature & Parks', 'Photography', 'Sports', 'Wellness',

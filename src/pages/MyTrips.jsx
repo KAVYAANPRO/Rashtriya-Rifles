@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../store/AppContext'
-import { EmptyState, ConfirmButton } from '../components/ui'
+import { EmptyState, ConfirmButton, PageLoader } from '../components/ui'
 import { fmtMoney, fmtRange, tripStatus } from '../lib/format'
 
 const TABS = ['All', 'Upcoming', 'Ongoing', 'Past']
@@ -12,7 +12,7 @@ const STATUS_STYLE = {
 }
 
 export default function MyTrips() {
-  const { userTrips, deleteTrip, tripSpend } = useApp()
+  const { userTrips, deleteTrip, tripSpend, tripsLoaded } = useApp()
   const navigate = useNavigate()
   const [tab, setTab] = useState('All')
   const [q, setQ] = useState('')
@@ -32,6 +32,8 @@ export default function MyTrips() {
       .filter(([, items]) => items.length > 0)
       .map(([label, items]) => ({ label, items }))
   }, [filtered, tab])
+
+  if (!tripsLoaded) return <PageLoader label="Loading your trips…" />
 
   return (
     <div className="max-w-[1320px] mx-auto px-4 md:px-10 py-8 md:py-14 anim-fade">

@@ -1,15 +1,31 @@
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../store/AppContext'
-import { CITIES } from '../store/mockData'
 import { EmptyState } from '../components/ui'
-import { fmtMoney, fmtRange, tripStatus } from '../lib/format'
+import { fmtMoney, fmtRange, tripStatus, dayCount } from '../lib/format'
 
 export default function Landing() {
-  const { currentUser, userTrips, tripSpend } = useApp()
+  const { currentUser, userTrips, tripSpend, cities } = useApp()
   const navigate = useNavigate()
 
   const recentTrips = [...userTrips].sort((a, b) => b.createdAt - a.createdAt).slice(0, 3)
-  const savedCities = CITIES.length
+  const savedCities = cities.length
+
+  // Headline the trip they're actually about to take, rather than fixed copy.
+  const nextTrip = [...userTrips]
+    .filter((t) => tripStatus(t) !== 'Past')
+    .sort((a, b) => a.startDate.localeCompare(b.startDate))[0] || null
+
+  const withCities = nextTrip?.sections?.filter((sec) => sec.cityName) || []
+  const origin = withCities[0]?.cityName || null
+  const destination = withCities[withCities.length - 1]?.cityName || null
+
+  const headline = origin
+    ? (destination && destination !== origin ? `${origin} to ${destination}.` : `${origin}, sorted.`)
+    : 'Two weeks, five cities, one plan.'
+
+  const subline = nextTrip
+    ? `${dayCount(nextTrip.startDate, nextTrip.endDate)} days · ${nextTrip.sections.length} stop${nextTrip.sections.length === 1 ? '' : 's'} · ${fmtMoney(nextTrip.budget, nextTrip.currency)} budget. Everything below updates as you plan.`
+    : 'Pick your stops, drop in activities, and watch the budget update as the itinerary takes shape.'
 
   return (
     <div className="anim-fade">
@@ -22,10 +38,10 @@ export default function Landing() {
               Welcome back, {currentUser.firstName || currentUser.username}
             </div>
             <h1 className="text-white text-[clamp(36px,5.4vw,62px)] font-extrabold tracking-tight leading-[1.02] mt-4">
-              Two weeks, five cities, one plan.
+              {headline}
             </h1>
             <p className="text-white/60 text-[17px] leading-relaxed max-w-[480px] mt-4 mb-7">
-              Pick your stops, drop in activities, and watch the budget update as the itinerary takes shape.
+              {subline}
             </p>
             <div className="flex gap-3 flex-wrap">
               <div onClick={() => navigate('/trips/new')} className="px-7 py-4 rounded-full bg-white text-[var(--ink)] text-[15px] font-bold cursor-pointer transition-transform hover:-translate-y-0.5">
@@ -41,7 +57,7 @@ export default function Landing() {
             <div className="absolute -left-2 -bottom-6 bg-white rounded-2xl px-5 py-4 shadow-2xl">
               <div className="mono text-[10px] tracking-widest text-[#8b8ca0]">NEXT DEPARTURE</div>
               <div className="text-[19px] font-extrabold tracking-tight mt-1.5">
-                {recentTrips[0] ? recentTrips[0].name : 'No trips yet'}
+                {nextTrip ? nextTrip.name : 'No trips yet'}
               </div>
             </div>
             <div className="absolute -right-2 -top-6 rounded-2xl px-5 py-4 text-white shadow-2xl" style={{ background: 'var(--ac)' }}>
@@ -67,7 +83,7 @@ export default function Landing() {
           <div onClick={() => navigate('/search')} className="text-sm font-bold cursor-pointer" style={{ color: 'var(--ac)' }}>See all cities →</div>
         </div>
         <div className="mt-5 grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          {CITIES.slice(0, 4).map((c) => (
+          {cities.slice(0, 4).map((c) => (
             <div key={c.id} onClick={() => navigate('/search')} className="bg-white border border-[#e9eaf2] rounded-3xl overflow-hidden cursor-pointer transition-transform hover:-translate-y-2 hover:shadow-2xl">
               <div className="h-[150px] grid place-items-center text-[#8b8ca0] mono text-[10px] tracking-widest uppercase" style={{ background: 'repeating-linear-gradient(135deg,#eceef7 0 9px,#f6f7fc 9px 18px)' }}>{c.name}</div>
               <div className="p-4">

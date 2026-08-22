@@ -1,5 +1,6 @@
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CITIES, ACTIVITIES } from '../store/mockData'
+import { catalog } from '../lib/api'
 import ScrollMorphHero from '../components/ui/scroll-morph-hero'
 import Logo from '../components/Logo'
 
@@ -10,21 +11,36 @@ const STEPS = [
   { n: '04', title: 'Track the budget', desc: 'See spend vs. budget by category at a glance, with a clear warning if any section runs over.' },
 ]
 
-const FEATURES = [
+const featuresFor = (cityCount, activityCount) => [
   { title: 'Live budget tracking', desc: 'Every activity you add updates your total spend immediately — no manual math, no surprises.' },
   { title: 'Day-by-day itinerary', desc: 'Switch between a day-list view and a by-city view to see your trip exactly how you want it.' },
-  { title: 'Curated catalog', desc: `${ACTIVITIES.length}+ activities across ${CITIES.length} cities, each with cost, duration and rating.` },
+  { title: 'Curated catalog', desc: `${activityCount}+ activities across ${cityCount} cities, each with cost, duration and rating.` },
   { title: 'Everything in one place', desc: 'Trips, stops, activities and budgets live together — no spreadsheets, no scattered notes.' },
 ]
 
-const STATS = [
-  { value: `${CITIES.length}`, label: 'cities to explore' },
-  { value: `${ACTIVITIES.length}+`, label: 'curated activities' },
+const statsFor = (cityCount, activityCount) => [
+  { value: `${cityCount}`, label: 'cities to explore' },
+  { value: `${activityCount}+`, label: 'curated activities' },
   { value: '$0', label: 'to start planning' },
 ]
 
 export default function Welcome() {
   const navigate = useNavigate()
+  // Real catalog counts, read from the public endpoints.
+  const [counts, setCounts] = useState({ cities: 0, activities: 0 })
+
+  useEffect(() => {
+    let alive = true
+    Promise.all([catalog.cities(), catalog.activities()])
+      .then(([cities, activities]) => {
+        if (alive) setCounts({ cities: cities.length, activities: activities.length })
+      })
+      .catch(() => { /* counts stay at 0 until the API is reachable */ })
+    return () => { alive = false }
+  }, [])
+
+  const FEATURES = featuresFor(counts.cities, counts.activities)
+  const STATS = statsFor(counts.cities, counts.activities)
 
   const jumpTo = (id) => {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -138,11 +154,11 @@ export default function Welcome() {
           </div>
           <div>
             <div className="text-white text-[13px] font-bold uppercase tracking-widest mb-4">Coverage</div>
-            <p className="text-sm text-white/60 leading-relaxed">{CITIES.length} cities · {ACTIVITIES.length}+ activities and counting.</p>
+            <p className="text-sm text-white/60 leading-relaxed">{counts.cities} cities · {counts.activities}+ activities and counting.</p>
           </div>
           <div>
             <div className="text-white text-[13px] font-bold uppercase tracking-widest mb-4">Demo login</div>
-            <p className="text-sm text-white/60 leading-relaxed mono">ananya.rao / travel2026</p>
+            <p className="text-sm text-white/60 leading-relaxed mono">ananya.rao@example.com / travel2026</p>
           </div>
         </div>
         <div className="border-t border-white/10">

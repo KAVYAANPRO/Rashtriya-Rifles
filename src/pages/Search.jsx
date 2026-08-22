@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../store/AppContext'
-import { ACTIVITIES, CATEGORIES, cityById } from '../store/mockData'
-import { EmptyState } from '../components/ui'
+import { EmptyState, PageLoader } from '../components/ui'
 import { fmtMoney } from '../lib/format'
 
 function AddToTripPanel({ activity, onClose }) {
-  const { userTrips, addActivityToSection, notify } = useApp()
+  const { userTrips, addActivityToSection } = useApp()
+  const [saving, setSaving] = useState(false)
   const matchingSections = userTrips.flatMap((t) => t.sections.filter((s) => s.cityId === activity.city).map((s) => ({ trip: t, section: s })))
   const allSections = userTrips.flatMap((t) => t.sections.map((s) => ({ trip: t, section: s })))
   const options = matchingSections.length > 0 ? matchingSections : allSections
@@ -19,10 +19,12 @@ function AddToTripPanel({ activity, onClose }) {
     return <div className="text-xs text-[#8b8ca0] mt-2">Add a section to one of your trips before adding activities.</div>
   }
 
-  const submit = () => {
+  const submit = async () => {
     const [tripId, sectionId] = choice.split('::')
     const target = options.find((o) => o.trip.id === tripId && o.section.id === sectionId)
-    addActivityToSection(tripId, sectionId, { activityId: activity.id, name: activity.name, cost: activity.cost, category: activity.category, date: target.section.startDate })
+    setSaving(true)
+    await addActivityToSection(tripId, sectionId, { activityId: activity.id, name: activity.name, cost: activity.cost, category: activity.category, date: target.section.startDate })
+    setSaving(false)
     onClose()
   }
 
@@ -36,7 +38,7 @@ function AddToTripPanel({ activity, onClose }) {
         ))}
       </select>
       <div className="flex gap-2">
-        <button onClick={submit} className="flex-1 h-9 rounded-lg text-white text-xs font-bold cursor-pointer" style={{ background: 'var(--ac)' }}>Confirm add</button>
+        <button onClick={submit} disabled={saving} className="flex-1 h-9 rounded-lg text-white text-xs font-bold cursor-pointer disabled:opacity-50" style={{ background: 'var(--ac)' }}>{saving ? 'Adding…' : 'Confirm add'}</button>
         <button onClick={onClose} className="h-9 px-3 rounded-lg border border-[#dfe1ec] text-xs font-bold text-[#6b6c80] cursor-pointer">Cancel</button>
       </div>
     </div>
@@ -44,22 +46,24 @@ function AddToTripPanel({ activity, onClose }) {
 }
 
 export default function Search() {
-  const { isActivityInTrip, userTrips } = useApp()
+  const { isActivityInTrip, userTrips, activities, categories, catalogReady, cityById } = useApp()
   const navigate = useNavigate()
   const [q, setQ] = useState('')
   const [category, setCategory] = useState('All')
   const [openId, setOpenId] = useState(null)
 
   const results = useMemo(() => {
-    return ACTIVITIES.filter((a) => {
+    return activities.filter((a) => {
       const matchesQ = !q.trim() || a.name.toLowerCase().includes(q.trim().toLowerCase()) || cityById(a.city)?.name.toLowerCase().includes(q.trim().toLowerCase())
       const matchesCat = category === 'All' || a.category === category
       return matchesQ && matchesCat
     })
-  }, [q, category])
+  }, [activities, cityById, q, category])
 
   const cities = new Set(results.map((r) => r.city))
   const avg = results.length ? Math.round(results.reduce((s, r) => s + r.cost, 0) / results.length) : 0
+
+  if (!catalogReady) return <PageLoader label="Loading activities…" />
 
   return (
     <div className="max-w-[1320px] mx-auto px-4 md:px-10 py-8 md:py-14 anim-fade">
@@ -77,7 +81,7 @@ export default function Search() {
       </div>
 
       <div className="flex gap-2 mt-4.5 flex-wrap">
-        {['All', ...CATEGORIES].map((c) => (
+        {['All', ...categories].map((c) => (
           <div
             key={c}
             onClick={() => setCategory(c)}

@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import { useApp } from '../store/AppContext'
 import { Field, PrimaryButton } from '../components/ui'
 import Logo from '../components/Logo'
+import GoogleSignInButton from '../components/GoogleSignInButton'
 
 export default function Login() {
   const { login } = useApp()
   const navigate = useNavigate()
-  const [username, setUsername] = useState('ananya.rao')
+  const [email, setEmail] = useState('ananya.rao@example.com')
   const [password, setPassword] = useState('travel2026')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -25,20 +26,26 @@ export default function Login() {
   }
   const onLeave = () => setTilt({ x: 0, y: 0 })
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault()
     setError('')
-    if (!username.trim() || !password) {
-      setError('Enter both a username and a password.')
+    if (!email.trim() || !password) {
+      setError('Enter both an email and a password.')
       return
     }
     setLoading(true)
-    setTimeout(() => {
-      const res = login({ username, password })
-      setLoading(false)
-      if (!res.ok) setError(res.error)
-      else navigate('/')
-    }, 200)
+    const res = await login({ email, password })
+    setLoading(false)
+    if (res.ok) {
+      navigate('/')
+      return
+    }
+    // An unverified account needs the OTP screen, not an error message.
+    if (res.code === 'EMAIL_NOT_VERIFIED') {
+      navigate(`/verify-email?email=${encodeURIComponent(email.trim())}`)
+      return
+    }
+    setError(res.error)
   }
 
   return (
@@ -120,7 +127,7 @@ export default function Login() {
 
         <div className="relative text-white/55 text-sm leading-relaxed max-w-[420px] shrink-0">
           Plan multi-city trips, build day-by-day itineraries and keep the whole budget in one place.
-          <div className="mt-6 text-white/35 text-xs mono">Demo login: ananya.rao / travel2026</div>
+          <div className="mt-6 text-white/35 text-xs mono">Demo login: ananya.rao@example.com / travel2026</div>
         </div>
       </div>
 
@@ -130,10 +137,16 @@ export default function Login() {
           <h1 className="text-[clamp(32px,4.4vw,44px)] font-extrabold tracking-tight mt-3 mb-1.5">Welcome back.</h1>
           <p className="text-[#6b6c80] text-[15px] leading-relaxed mb-7">Your trips, stops and budgets are exactly where you left them.</p>
           <div className="flex flex-col gap-4">
-            <Field label="Username" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="jane.doe" />
+            <Field label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jane@example.com" />
             <Field label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
             {error && <div className="text-sm font-semibold text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</div>}
             <PrimaryButton type="submit" disabled={loading}>{loading ? 'Signing in…' : 'Login'}</PrimaryButton>
+            <GoogleSignInButton onError={setError} />
+            <div className="text-center text-sm text-[#6b6c80]">
+              <span onClick={() => navigate('/forgot-password')} className="font-bold cursor-pointer" style={{ color: 'var(--ac)' }}>
+                Forgot your password?
+              </span>
+            </div>
             <div className="text-center text-sm text-[#6b6c80]">
               New here?{' '}
               <span onClick={() => navigate('/register')} className="font-bold cursor-pointer" style={{ color: 'var(--ac)' }}>

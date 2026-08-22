@@ -6,6 +6,7 @@ const links = [
   { to: '/', label: 'Home' },
   { to: '/trips', label: 'My trips' },
   { to: '/search', label: 'Browse activities' },
+  { to: '/travel', label: 'Travel' },
 ]
 
 export default function Navbar() {
@@ -14,7 +15,7 @@ export default function Navbar() {
 
   if (!currentUser) return null
 
-  const initials = `${currentUser.firstName?.[0] || currentUser.username[0]}${currentUser.lastName?.[0] || ''}`.toUpperCase()
+  const initials = `${currentUser.firstName?.[0] || currentUser.username?.[0] || '?'}${currentUser.lastName?.[0] || ''}`.toUpperCase()
 
   return (
     <div className="sticky top-0 z-50 bg-[var(--ink)]/95 backdrop-blur border-b border-white/10">
@@ -45,7 +46,7 @@ export default function Navbar() {
         </div>
         <div
           onClick={() => navigate('/profile')}
-          title={currentUser.username}
+          title={currentUser.email}
           className="shrink-0 w-[34px] h-[34px] sm:w-[38px] sm:h-[38px] rounded-full border border-white/20 grid place-items-center text-white/80 mono text-xs cursor-pointer bg-[#2a2a3a]"
         >
           {initials}

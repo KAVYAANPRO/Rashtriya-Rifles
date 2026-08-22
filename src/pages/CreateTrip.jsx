@@ -1,8 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../store/AppContext'
-import { CITIES, activitiesByCity, cityById } from '../store/mockData'
-import { Field, SelectField, PrimaryButton } from '../components/ui'
+import { Field, SelectField, PrimaryButton, PageLoader } from '../components/ui'
 import { fmtMoney } from '../lib/format'
 
 const todayPlus = (days) => {
@@ -12,18 +11,25 @@ const todayPlus = (days) => {
 }
 
 export default function CreateTrip() {
-  const { createTrip, addActivityToSection } = useApp()
+  const { createTrip, addActivityToSection, cities, catalogReady, activitiesByCity, cityById } = useApp()
   const navigate = useNavigate()
   const [name, setName] = useState('')
-  const [cityId, setCityId] = useState(CITIES[0].id)
+  const [cityId, setCityId] = useState('')
   const [startDate, setStartDate] = useState(todayPlus(14))
   const [endDate, setEndDate] = useState(todayPlus(21))
   const [budget, setBudget] = useState('2500')
   const [currency, setCurrency] = useState('USD')
   const [error, setError] = useState('')
+  const [needsUpgrade, setNeedsUpgrade] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [selectedIds, setSelectedIds] = useState(() => new Set())
 
-  const suggestions = useMemo(() => activitiesByCity(cityId).slice(0, 5), [cityId])
+  // The starting-place list arrives from the API, so pick the first one once.
+  useEffect(() => {
+    if (!cityId && cities.length > 0) setCityId(cities[0].id)
+  }, [cities, cityId])
+
+  const suggestions = useMemo(() => activitiesByCity(cityId).slice(0, 5), [activitiesByCity, cityId])
   const city = cityById(cityId)
 
   const toggleSuggestion = (activityId) => {
@@ -40,21 +46,42 @@ export default function CreateTrip() {
     setSelectedIds(new Set())
   }
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault()
     if (!name.trim()) return setError('Give your trip a name.')
+    if (!city) return setError('Pick a starting place.')
     if (endDate < startDate) return setError('End date must be on or after the start date.')
     if (Number(budget) < 0) return setError('Budget cannot be negative.')
     setError('')
-    const trip = createTrip({ name: name.trim(), startDate, endDate, budget, currency, cityId, cityLabel: `${city.name} arrival` })
-    const sectionId = trip.sections[0]?.id
-    if (sectionId && selectedIds.size > 0) {
-      suggestions
-        .filter((s) => selectedIds.has(s.id))
-        .forEach((s) => addActivityToSection(trip.id, sectionId, { activityId: s.id, name: s.name, cost: s.cost, category: s.category, date: startDate }))
+    setNeedsUpgrade(false)
+    setSaving(true)
+
+    const res = await createTrip({
+      name: name.trim(), startDate, endDate, budget, currency,
+      cityId, cityLabel: `${city.name} arrival`,
+    })
+
+    if (!res.ok) {
+      setSaving(false)
+      setNeedsUpgrade(res.status === 403)
+      return setError(res.error)
     }
+
+    const trip = res.trip
+    const sectionId = trip?.sections[0]?.id
+    if (sectionId && selectedIds.size > 0) {
+      // Sequential so each add lands against a freshly reloaded trip.
+      for (const s of suggestions.filter((x) => selectedIds.has(x.id))) {
+        await addActivityToSection(trip.id, sectionId, {
+          activityId: s.id, name: s.name, cost: s.cost, category: s.category, date: startDate,
+        })
+      }
+    }
+    setSaving(false)
     navigate(`/trips/${trip.id}/builder`)
   }
+
+  if (!catalogReady) return <PageLoader label="Loading destinations…" />
 
   return (
     <div className="max-w-[1320px] mx-auto px-4 md:px-10 py-8 md:py-14 anim-rise">
@@ -66,7 +93,8 @@ export default function CreateTrip() {
           <Field label="Trip name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Kansai Spring Loop" />
           <div className="mt-4">
             <SelectField label="Starting place" value={cityId} onChange={(e) => changeCity(e.target.value)}>
-              {CITIES.map((c) => (
+              {cities.length === 0 && <option value="">No cities available</option>}
+              {cities.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}, {c.country}</option>
               ))}
             </SelectField>
@@ -82,15 +110,29 @@ export default function CreateTrip() {
             </SelectField>
           </div>
           {error && <div className="mt-4 text-sm font-semibold text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</div>}
-          <PrimaryButton type="submit" className="w-full mt-6">Save and build itinerary</PrimaryButton>
+          {needsUpgrade && (
+            <div
+              onClick={() => navigate('/profile')}
+              className="mt-3 py-2.5 rounded-xl text-center text-[13px] font-bold cursor-pointer text-white transition-transform hover:-translate-y-0.5"
+              style={{ background: 'var(--ink)' }}
+            >
+              Upgrade to Premium
+            </div>
+          )}
+          <PrimaryButton type="submit" className="w-full mt-6" disabled={saving}>
+            {saving ? 'Saving…' : 'Save and build itinerary'}
+          </PrimaryButton>
         </div>
 
         <div>
-          <h3 className="text-[18px] font-extrabold tracking-tight mb-1">Suggestions for {city.name}</h3>
+          <h3 className="text-[18px] font-extrabold tracking-tight mb-1">Suggestions for {city?.name || 'your trip'}</h3>
           <p className="text-[#6b6c80] text-sm mb-4">
             Based on the place you picked — added ones join your itinerary automatically once you save.
           </p>
           <div className="flex flex-col gap-3">
+            {suggestions.length === 0 && (
+              <div className="text-sm text-[#8b8ca0]">No catalog activities for this city yet.</div>
+            )}
             {suggestions.map((s) => {
               const added = selectedIds.has(s.id)
               return (

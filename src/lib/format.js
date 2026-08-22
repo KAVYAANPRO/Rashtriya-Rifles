@@ -34,3 +34,9 @@ export function tripStatus(trip) {
   if (trip.startDate > today) return 'Upcoming'
   return 'Ongoing'
 }
+
+/** "09:00 – 10:30", or just the start when no end is known. */
+export function fmtTimeRange(start, end) {
+  if (!start) return ''
+  return end ? `${start} – ${end}` : start
+}
