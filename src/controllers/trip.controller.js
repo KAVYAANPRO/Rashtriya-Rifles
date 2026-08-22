@@ -6,7 +6,8 @@ const prisma = new PrismaClient();
 const createTrip = async (req, res, next) => {
   try {
     const tripCount = await prisma.trip.count({ where: { userId: req.user.id } });
-    if (tripCount >= 3 && !req.user.isPremium) {
+    const isPremium = req.user.isPremium === true;
+    if (tripCount >= 3 && !isPremium) {
       return res.status(403).json({ 
         success: false, 
         message: 'Trip limit reached. Please upgrade to Premium to create more trips.',
