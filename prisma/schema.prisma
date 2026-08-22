@@ -1,0 +1,269 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ──────────────────────────────
+// USERS & AUTH
+// ──────────────────────────────
+
+model User {
+  id                  Int       @id @default(autoincrement()) @map("user_id")
+  email               String    @unique @db.VarChar(100)
+  passwordHash        String?   @map("password_hash") @db.VarChar(255)
+  authProvider        String    @default("LOCAL") @map("auth_provider") @db.VarChar(20) // LOCAL | GOOGLE
+  googleId            String?   @unique @map("google_id") @db.VarChar(255)
+  firstName           String    @map("first_name") @db.VarChar(50)
+  lastName            String    @map("last_name") @db.VarChar(50)
+  profilePictureUrl   String?   @map("profile_picture_url") @db.VarChar(255)
+  bio                 String?   @db.Text
+  preferredCurrency   String    @default("USD") @map("preferred_currency") @db.VarChar(3)
+  languagePreference  String    @default("en") @map("language_preference") @db.VarChar(10)
+  isActive            Boolean   @default(true) @map("is_active")
+  isVerified          Boolean   @default(false) @map("is_verified")
+  emailVerifiedAt     DateTime? @map("email_verified_at")
+  lastLoginAt         DateTime? @map("last_login_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+  deletedAt           DateTime? @map("deleted_at")
+
+  trips               Trip[]
+  preferences         UserPreference?
+  sharedByMe          TripShare[] @relation("SharedBy")
+  sharedWithMe        TripShare[] @relation("SharedWith")
+  otpCodes            OtpCode[]
+
+  @@index([email])
+  @@index([isActive])
+  @@index([createdAt])
+  @@map("users")
+}
+
+model UserPreference {
+  id                          Int      @id @default(autoincrement()) @map("preference_id")
+  userId                      Int      @unique @map("user_id")
+  emailNotificationsEnabled   Boolean  @default(true) @map("email_notifications_enabled")
+  newsletterSubscribed        Boolean  @default(false) @map("newsletter_subscribed")
+  theme                       String   @default("auto") @db.VarChar(10)
+  privacyLevel                String   @default("private") @map("privacy_level") @db.VarChar(20)
+  createdAt                   DateTime @default(now()) @map("created_at")
+  updatedAt                   DateTime @updatedAt @map("updated_at")
+
+  user                        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+// ──────────────────────────────
+// OTP CODES
+// ──────────────────────────────
+
+model OtpCode {
+  id        Int      @id @default(autoincrement()) @map("otp_id")
+  userId    Int      @map("user_id")
+  code      String   @db.VarChar(6)
+  type      String   @db.VarChar(50) // EMAIL_VERIFICATION | PASSWORD_RESET
+  expiresAt DateTime @map("expires_at")
+  isUsed    Boolean  @default(false) @map("is_used")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([code])
+  @@map("otp_codes")
+}
+
+// ──────────────────────────────
+// TRIPS
+// ──────────────────────────────
+
+model Trip {
+  id               Int       @id @default(autoincrement()) @map("trip_id")
+  userId           Int       @map("user_id")
+  tripName         String    @map("trip_name") @db.VarChar(150)
+  description      String?   @db.Text
+  startDate        DateTime  @map("start_date") @db.Date
+  endDate          DateTime  @map("end_date") @db.Date
+  coverImageUrl    String?   @map("cover_image_url") @db.VarChar(255)
+  totalBudget      Decimal?  @map("total_budget") @db.Decimal(12, 2)
+  currency         String    @default("USD") @db.VarChar(3)
+  isPublic         Boolean   @default(false) @map("is_public")
+  isArchived       Boolean   @default(false) @map("is_archived")
+  publicUrlSlug    String?   @unique @map("public_url_slug") @db.VarChar(100)
+  viewCount        Int       @default(0) @map("view_count")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  deletedAt        DateTime? @map("deleted_at")
+
+  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stops            Stop[]
+  budget           TripBudget?
+  shares           TripShare[]
+
+  @@index([userId])
+  @@index([startDate])
+  @@index([isPublic])
+  @@index([publicUrlSlug])
+  @@map("trips")
+}
+
+model Stop {
+  id                    Int      @id @default(autoincrement()) @map("stop_id")
+  tripId                Int      @map("trip_id")
+  cityId                Int      @map("city_id")
+  stopSequence          Int      @map("stop_sequence")
+  startDate             DateTime @map("start_date") @db.Date
+  endDate               DateTime @map("end_date") @db.Date
+  accommodationBudget   Decimal? @map("accommodation_budget") @db.Decimal(10, 2)
+  notes                 String?  @db.Text
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  trip                  Trip           @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  city                  City           @relation(fields: [cityId], references: [id])
+  activities            TripActivity[]
+
+  @@unique([tripId, stopSequence])
+  @@index([tripId])
+  @@index([cityId])
+  @@map("stops")
+}
+
+// ──────────────────────────────
+// CITIES & ACTIVITIES (catalog data)
+// ──────────────────────────────
+
+model City {
+  id                Int      @id @default(autoincrement()) @map("city_id")
+  cityName          String   @map("city_name") @db.VarChar(100)
+  country           String   @db.VarChar(100)
+  countryCode       String   @map("country_code") @db.VarChar(2)
+  costIndex         String   @default("Medium") @map("cost_index") @db.VarChar(10) // Low | Medium | High
+  popularityScore   Int      @default(0) @map("popularity_score")
+  imageUrl          String?  @map("image_url") @db.VarChar(255)
+  latitude          Decimal? @db.Decimal(10, 8)
+  longitude         Decimal? @db.Decimal(11, 8)
+  description       String?  @db.Text
+  isActive          Boolean  @default(true) @map("is_active")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  stops             Stop[]
+  activities        Activity[]
+
+  @@unique([cityName, countryCode])
+  @@index([countryCode])
+  @@index([costIndex])
+  @@index([popularityScore])
+  @@map("cities")
+}
+
+model Category {
+  id             Int    @id @default(autoincrement()) @map("category_id")
+  categoryName   String @unique @map("category_name") @db.VarChar(50)
+  description    String? @db.VarChar(200)
+  iconUrl        String? @map("icon_url") @db.VarChar(255)
+  sortOrder      Int    @default(0) @map("sort_order")
+
+  activities     Activity[]
+
+  @@map("categories")
+}
+
+model Activity {
+  id                  Int      @id @default(autoincrement()) @map("activity_id")
+  activityName        String   @map("activity_name") @db.VarChar(150)
+  cityId              Int      @map("city_id")
+  categoryId          Int      @map("category_id")
+  description         String?  @db.Text
+  estimatedCost       Decimal? @map("estimated_cost") @db.Decimal(10, 2)
+  estimatedDuration   Int?     @map("estimated_duration") // minutes
+  rating              Decimal? @db.Decimal(3, 2)
+  reviewCount         Int      @default(0) @map("review_count")
+  imageUrl            String?  @map("image_url") @db.VarChar(255)
+  bookingUrl          String?  @map("booking_url") @db.VarChar(500)
+  isPopular           Boolean  @default(false) @map("is_popular")
+  isActive            Boolean  @default(true) @map("is_active")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  city                City           @relation(fields: [cityId], references: [id])
+  category            Category       @relation(fields: [categoryId], references: [id])
+  tripActivities      TripActivity[]
+
+  @@index([cityId])
+  @@index([categoryId])
+  @@index([isPopular])
+  @@map("activities")
+}
+
+model TripActivity {
+  id                    Int      @id @default(autoincrement()) @map("trip_activity_id")
+  tripId                Int      @map("trip_id")
+  stopId                Int      @map("stop_id")
+  activityId            Int      @map("activity_id")
+  scheduledDate         DateTime @map("scheduled_date") @db.Date
+  scheduledStartTime    String?  @map("scheduled_start_time") @db.VarChar(5) // "09:00"
+  scheduledEndTime      String?  @map("scheduled_end_time") @db.VarChar(5)
+  actualCost            Decimal? @map("actual_cost") @db.Decimal(10, 2)
+  status                String   @default("planned") @db.VarChar(20) // planned | completed | cancelled
+  addedAt               DateTime @default(now()) @map("added_at")
+
+  stop                  Stop     @relation(fields: [stopId], references: [id], onDelete: Cascade)
+  activity              Activity @relation(fields: [activityId], references: [id])
+
+  @@unique([tripId, activityId, scheduledDate])
+  @@index([tripId])
+  @@index([stopId])
+  @@index([scheduledDate])
+  @@map("trip_activities")
+}
+
+// ──────────────────────────────
+// BUDGET
+// ──────────────────────────────
+
+model TripBudget {
+  id                       Int      @id @default(autoincrement()) @map("budget_id")
+  tripId                   Int      @unique @map("trip_id")
+  accommodationBudget      Decimal? @map("accommodation_budget") @db.Decimal(12, 2)
+  activitiesBudget         Decimal? @map("activities_budget") @db.Decimal(12, 2)
+  foodBudget               Decimal? @map("food_budget") @db.Decimal(12, 2)
+  transportationBudget     Decimal? @map("transportation_budget") @db.Decimal(12, 2)
+  miscellaneousBudget      Decimal? @map("miscellaneous_budget") @db.Decimal(12, 2)
+  totalBudget              Decimal? @map("total_budget") @db.Decimal(12, 2)
+  updatedAt                DateTime @updatedAt @map("updated_at")
+
+  trip                     Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@map("trip_budgets")
+}
+
+// ──────────────────────────────
+// SHARING
+// ──────────────────────────────
+
+model TripShare {
+  id                  Int       @id @default(autoincrement()) @map("share_id")
+  tripId              Int       @map("trip_id")
+  sharedByUserId      Int       @map("shared_by_user_id")
+  sharedWithUserId    Int?      @map("shared_with_user_id")
+  shareType           String    @default("public") @map("share_type") @db.VarChar(20)
+  passwordHash        String?   @map("password_hash") @db.VarChar(255)
+  shareUrlSlug        String    @unique @map("share_url_slug") @db.VarChar(100)
+  allowCopy           Boolean   @default(true) @map("allow_copy")
+  viewCount           Int       @default(0) @map("view_count")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  expiresAt           DateTime? @map("expires_at")
+
+  trip                Trip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  sharedBy            User      @relation("SharedBy", fields: [sharedByUserId], references: [id])
+  sharedWith          User?     @relation("SharedWith", fields: [sharedWithUserId], references: [id])
+
+  @@index([tripId])
+  @@index([shareUrlSlug])
+  @@map("trip_shares")
+}
