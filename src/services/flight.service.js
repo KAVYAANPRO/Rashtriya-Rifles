@@ -1,19 +1,19 @@
-async function searchFlights(origin, destination, date, returnDate) {
+async function searchFlights(origin, destination, date, returnDate, adults = 1, children = 0) {
   const serpapiKey = process.env.SERPAPI_KEY;
 
   if (serpapiKey && serpapiKey !== 'your_serpapi_key_here' && !serpapiKey.startsWith('http')) {
-    const flights = await searchFlightsSerpApi(origin, destination, date, returnDate, serpapiKey);
+    const flights = await searchFlightsSerpApi(origin, destination, date, returnDate, adults, children, serpapiKey);
     if (flights && flights.length > 0) return flights;
     console.log('SerpApi returned no flights or failed. Falling back to AI...');
   }
   
   console.log('Using AI Fallback for flight estimates...');
-  return await searchFlightsAI(origin, destination, date, returnDate);
+  return await searchFlightsAI(origin, destination, date, returnDate, adults, children);
 }
 
-async function searchFlightsSerpApi(origin, destination, date, returnDate, apiKey) {
+async function searchFlightsSerpApi(origin, destination, date, returnDate, adults, children, apiKey) {
   // SerpApi Google Flights Integration
-  let url = `https://serpapi.com/search.json?engine=google_flights&departure_id=${origin}&arrival_id=${destination}&outbound_date=${date}&currency=USD&hl=en&api_key=${apiKey}`;
+  let url = `https://serpapi.com/search.json?engine=google_flights&departure_id=${origin}&arrival_id=${destination}&outbound_date=${date}&currency=USD&hl=en&adults=${adults}&children=${children}&api_key=${apiKey}`;
   if (returnDate) {
     url += `&return_date=${returnDate}`;
   }
@@ -35,7 +35,7 @@ async function searchFlightsSerpApi(origin, destination, date, returnDate, apiKe
       arrivalTime: flight.flights[flight.flights.length - 1]?.arrival_airport?.time || 'Unknown',
       price: flight.price || 0,
       currency: 'USD',
-      bookingUrl: data.search_metadata?.google_flights_url || `https://www.google.com/travel/flights?q=Flights%20from%20${origin}%20to%20${destination}%20on%20${date}`,
+      bookingUrl: data.search_metadata?.google_flights_url || `https://www.google.com/travel/flights?q=Flights%20from%20${origin}%20to%20${destination}%20for%20${adults}%20adults%20and%20${children}%20children%20on%20${date}`,
       duration: flight.total_duration || 0,
       layovers: flight.layovers ? flight.layovers.length : 0
     }));
@@ -50,14 +50,15 @@ async function searchFlightsSerpApi(origin, destination, date, returnDate, apiKe
   }
 }
 
-async function searchFlightsAI(origin, destination, date, returnDate) {
+async function searchFlightsAI(origin, destination, date, returnDate, adults, children) {
   const openRouterKey = process.env.OPENROUTER_API_KEY;
   if (!openRouterKey) {
-    throw new Error('No API keys configured for flight search.');
+    throw new Error('No API keys configured for AI flight search.');
   }
 
-  const prompt = `You are a travel agent. The user wants to fly from ${origin} to ${destination} on ${date}${returnDate ? ` returning on ${returnDate}` : ''}.
+  const prompt = `You are a travel agent. The user wants to fly from ${origin} to ${destination} on ${date}${returnDate ? ` returning on ${returnDate}` : ''} for a family of ${adults} adults and ${children} children.
 Provide 3 realistic estimated flight options (Economy), AND a 7-day price graph showing the lowest price for flights 3 days before, the requested date, and 3 days after.
+Important: The "price" should be the TOTAL price for all ${adults + children} passengers combined.
 Respond ONLY with a valid JSON object matching this exact schema:
 {
   "flights": [
@@ -101,7 +102,7 @@ Respond ONLY with a valid JSON object matching this exact schema:
       arrivalTime: f.arrivalTime,
       price: f.price,
       currency: 'USD',
-      bookingUrl: `https://www.google.com/travel/flights?q=Flights%20from%20${origin}%20to%20${destination}%20on%20${date}`,
+      bookingUrl: `https://www.google.com/travel/flights?q=Flights%20from%20${origin}%20to%20${destination}%20for%20${adults}%20adults%20and%20${children}%20children%20on%20${date}`,
       duration: f.duration,
       layovers: f.layovers,
       isAiEstimate: true
