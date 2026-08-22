@@ -2,7 +2,7 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 const budgetService = require('./budget.service');
 
-async function autoPlanItinerary(userId, tripId, stopId, preferences = []) {
+async function autoPlanItinerary(userId, tripId, stopId, preferences = [], dietaryPreference = 'Any') {
   const trip = await prisma.trip.findFirst({ where: { id: tripId, userId } });
   if (!trip) throw new Error('Trip not found or unauthorized');
 
@@ -33,11 +33,12 @@ async function autoPlanItinerary(userId, tripId, stopId, preferences = []) {
   const prompt = `You are a world-class travel agent planning an itinerary for ${city.cityName}.
 The user is staying for ${durationDays} days.
 Their budget for activities and food is $${remainingBudget}.
-Their preferences are: ${preferences.length > 0 ? preferences.join(', ') : 'General tourist attractions'}.
+Their general preferences are: ${preferences.length > 0 ? preferences.join(', ') : 'General tourist attractions'}.
+Their dietary preference is: ${dietaryPreference}.
 
 RULES:
 1. You MUST schedule 3 meals a day (Breakfast, Lunch, Dinner) plus 1 Snack/Coffee break.
-2. Suggest famous, highly-rated restaurants.
+2. Suggest famous, highly-rated restaurants. ALL recommended food and restaurants MUST strictly adhere to their dietary preference (${dietaryPreference}).
 3. GEO-CLUSTER: Group activities geographically! If they visit the Eiffel Tower in the morning, their lunch and afternoon activities MUST be very close by to save cab fare and time.
 4. Respond ONLY with a valid JSON array representing the itinerary. No markdown.
 
