@@ -88,7 +88,7 @@ export default function Landing() {
 
       <div className="max-w-[1320px] mx-auto px-4 md:px-10 py-14 pb-24">
         <div className="flex items-end justify-between gap-4 flex-wrap">
-          <h2 className="text-[clamp(22px,2.6vw,30px)] font-extrabold tracking-tight">Your trips</h2>
+          <h2 className="text-[clamp(22px,2.6vw,30px)] font-extrabold tracking-tight">Previous trips</h2>
           <div onClick={() => navigate('/trips')} className="text-sm font-bold cursor-pointer" style={{ color: 'var(--ac)' }}>All my trips →</div>
         </div>
         <div className="mt-5">

@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { useApp } from './store/AppContext'
 import Navbar from './components/Navbar'
 import Toast from './components/Toast'
+import Welcome from './pages/Welcome'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Landing from './pages/Landing'
@@ -18,6 +19,11 @@ function Protected({ children }) {
   return children
 }
 
+function Home() {
+  const { currentUser } = useApp()
+  return currentUser ? <Landing /> : <Welcome />
+}
+
 export default function App() {
   const { currentUser } = useApp()
 
@@ -28,7 +34,7 @@ export default function App() {
         <Route path="/login" element={currentUser ? <Navigate to="/" replace /> : <Login />} />
         <Route path="/register" element={currentUser ? <Navigate to="/" replace /> : <Register />} />
 
-        <Route path="/" element={<Protected><Landing /></Protected>} />
+        <Route path="/" element={<Home />} />
         <Route path="/trips" element={<Protected><MyTrips /></Protected>} />
         <Route path="/trips/new" element={<Protected><CreateTrip /></Protected>} />
         <Route path="/trips/:tripId/builder" element={<Protected><BuildItinerary /></Protected>} />
