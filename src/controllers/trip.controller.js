@@ -1,7 +1,19 @@
 const tripService = require('../services/trip.service');
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
+
 
 const createTrip = async (req, res, next) => {
   try {
+    const tripCount = await prisma.trip.count({ where: { userId: req.user.id } });
+    if (tripCount >= 3 && !req.user.isPremium) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Trip limit reached. Please upgrade to Premium to create more trips.',
+        requiresUpgrade: true
+      });
+    }
+
     const trip = await tripService.createTrip(req.user.id, req.body);
     res.status(201).json({ success: true, data: trip });
   } catch (error) {
